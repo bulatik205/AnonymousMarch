@@ -28,7 +28,9 @@ if (!isset($update['message']['from']['id']) || !isset($update['message']['chat'
 
 define("USER_ID", $update['message']['from']['id']);
 define("CHAT_ID", $update['message']['chat']['id']);
+define("FIRST_NAME", $update['message']['from']['first_name'] ?? "пользователь");
 define("SEND_MESSAGE_URL", "https://api.telegram.org/bot" . API_BOT_TOKEN . "/sendMessage");
+define("SEND_PHOTO_URL", "https://api.telegram.org/bot" . API_BOT_TOKEN . "/sendPhoto");
 
 file_put_contents("log.log", $json_response);
 
@@ -50,6 +52,59 @@ if (!$userService->ensureUserExists()) {
     $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
     $curlService->send();
     exit;
+}
+
+$getStage = $userService->getStage();
+
+if (!$getStage['success']) {
+    $preparedData['text'] = "Ошибка сервера. Попробуйте позже";
+    $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+    $curlService->send();
+    exit;
+}
+
+$userStage = $getStage['fields']['stage'];
+$userInput = $update['message']['text'];
+
+if (isset($update['message']['text']) && $userStage == "input") {
+}
+
+if (isset($update['message']['text']) && str_starts_with($userInput, '/')) {
+    $parts = explode(" ", $userInput);
+    $command = $parts[0];
+    $queryParam = isset($parts[1]) ? substr($parts[1], 0, 50) : null;
+
+    switch ($command) {
+        case '/start':
+            if ($queryParam != null) {
+                $recipientRepository = $userService->getRecipientRepository($queryParam);
+
+                if ($recipientRepository['success']) {
+                    $recipientFirstName = isset($recipientRepository['fields']['first_name']) ? $recipientRepository['fields']['first_name'] : $recipientRepository['fields']['id'];
+                    $preparedData['text'] = "<b><i>🌸 Отправь " . $recipientFirstName . " поздравление на 8 марта</i>\n\n<blockquote>🌹 Введи свой текст ниже:</blockquote></b>";
+                    $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+                    $curlService->send();
+
+                    $setNewStage = $userService->setUserStage("input");
+                    if (!$setNewStage) {
+                        $preparedData['text'] = "Ошибка сервера. Попробуйте позже. С: " . $setNewStage;
+                        $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+                        $curlService->send();
+                    }
+                    exit;
+                }
+            }
+
+            $caption = "<b>💐 Привет, " . FIRST_NAME . "!\n\n<blockquote>🌸 В этом боте можно поздравить кого угодно с 8 марта!</blockquote>\n<blockquote>🔥 Заходи по ссылке, которую тебе отправили или отправь свою ссылку!</blockquote>\n\n<i>💋 Твоя ссылка:</i> <a href='https://t.me/march_v_bot?start=" . USER_ID . "'>https://t.me/march_v_bot?start=" . USER_ID . "</a></b>";
+            $curlService = new CurlService($preparedData, SEND_PHOTO_URL);
+            $curlService->sendPhoto(__DIR__ . "/source/images/start.png", $caption);
+
+            if (!$curlService) {
+                $preparedData['text'] = "Произошла ошибка";
+                $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+                $curlService->send();
+            }
+    }
 }
 
 $preparedData['text'] = "Привет!";
