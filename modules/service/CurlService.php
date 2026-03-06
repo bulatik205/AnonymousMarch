@@ -10,7 +10,7 @@ class CurlService
         $this->telegramApiLink = $telegramApiLink;
     }
 
-    public function send()
+    public function send(): void
     {
         try {
             $ch = curl_init();
@@ -22,13 +22,9 @@ class CurlService
 
             if (curl_error($ch)) {
                 error_log(curl_error($ch) . " - " . curl_errno($ch));
-                return false; 
             }
-
-            return true;
         } catch (Exception $e) {
             error_log($e->getMessage());
-            return false;
         }
     }
 }
