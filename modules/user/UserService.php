@@ -44,4 +44,55 @@ class UserService
 
         return $this->pdo->lastInsertId() > 0;
     }
+
+    public function getStage(): array
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT `stage` FROM `users` WHERE telegram_id = ?");
+            $stmt->execute([$this->userRepository['id']]);
+            $result = $stmt->fetch();
+            return [
+                'success' => $result ? true : false,
+                'fields' => $result
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return [ 'success' => false ];
+        }
+    } 
+
+    public function getRecipientRepository($recipientId): array 
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT * FROM `users` WHERE `telegram_id` = ?");
+            $stmt->execute([$recipientId]);
+            $result = $stmt->fetch();
+
+            if (empty($result)) {
+                return [
+                    'success' => false
+                ];
+            }
+
+            return [
+                'success' => true,
+                'fields' => $result
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return [ 'success' => false ];
+        }
+    }
+
+    public function setUserStage(string $newStage): bool
+    {
+        try {
+            $stmt = $this->pdo->prepare("UPDATE `users` SET `stage` = ? WHERE `telegram_id` = ?");
+            $stmt->execute([$newStage, $this->userRepository['id']]);
+            return true; 
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return false;
+        }
+    }
 }
