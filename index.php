@@ -28,5 +28,32 @@ if (!isset($update['message']['from']['id']) || !isset($update['message']['chat'
 
 define("USER_ID", $update['message']['from']['id']);
 define("CHAT_ID", $update['message']['chat']['id']);
+define("SEND_MESSAGE_URL", "https://api.telegram.org/bot" . API_BOT_TOKEN . "/sendMessage");
 
 file_put_contents("log.log", $json_response);
+
+$userRepository = [
+    'id' => USER_ID,
+    'first_name' => $update['message']['from']['first_name'] ?? null,
+    'last_name' => $update['message']['from']['last_name'] ?? null
+];
+
+$preparedData = [
+    'chat_id' => CHAT_ID,
+    'parse_mode' => 'HTML'
+];
+
+$userService = new UserService($userRepository, $pdo);
+
+if (!$userService->ensureUserExists()) {
+    $preparedData['text'] = "Ошибка сервера. Попробуйте позже";
+    $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+    $curlService->send();
+    exit;
+}
+
+$preparedData['text'] = "Привет!";
+$curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+$curlService->send();
+
+exit;
