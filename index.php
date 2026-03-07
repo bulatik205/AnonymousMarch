@@ -255,17 +255,40 @@ if (isset($update['message']['text'])) {
 
     switch ($text) {
         case '🪭 Мои поздравления':
-            $preparedData['text'] = "Ваши отправленные поздравления:";
+            $congratulations = $userService->getCongratulations();
+
+            if (!$congratulations['success'] || empty($congratulations['fields'])) {
+                $preparedData['text'] = "💜 У тебя пока нет поздравлений";
+                break;
+            }
+
+            $preparedData['text'] = "💜 <b>Твои поздравления:</b>\n\n";
+
+            foreach ($congratulations['fields'] as $c) {
+                if ($c['from_id'] == USER_ID) {
+                    $arrow = "Отправлено";
+                    $name = $c['recipient_name'] ?? $c['recipient_id'];
+                    $action = "<b>кому:</b> {$name}";
+                } else {
+                    $arrow = "Получено";
+                    $name = $c['from_name'] ?? $c['from_id'];
+                    $action = "<b>от:</b> {$name}";
+                }
+
+                $anon = ($c['is_anonym'] == 'visible') ? "👀 [С именем]" : "🥷 [Анонимно]";
+                $text = htmlspecialchars(mb_substr($c['text'], 0, 30)) . (mb_strlen($c['text']) > 30 ? '…' : '');
+                $date = date("d.m H:i", strtotime($c['created_at']));
+
+                $preparedData['text'] .= "<blockquote><code>{$anon} {$arrow} {$action}: \"{$text}\" [{$date}]</code></blockquote>\n";
+            }
             break;
 
         case '🍁 Профиль':
             $resopitory = $userService->getUser();
             $countSendCongratulations = $userService->getCountSendCongratulations();
             $countTakedCongratulations = $userService->getCountTakedCongratulations();
-            $preparedData['text'] = "<b>🥷 Ваш профиль \n\n";
-            $preparedData['text'] .= "<blockquote><i>🔑 ID:</i> " . USER_ID . "\n\n";
-            $preparedData['text'] .= "<i>✏️ Имя:</i> " . $resopitory['fields']['first_name'] . "\n";
-            $preparedData['text'] .= "<i>🕐 Зашли в бота:</i> " . ($resopitory['fields']['created_at'] ?? "недавно...") . "</blockquote>\n";
+            $preparedData['text'] = "<b>🥷 Профиль " . FIRST_NAME . "\n\n";
+            $preparedData['text'] .= "<blockquote><i>🔑 ID:</i> " . USER_ID . "</blockquote>\n";
             $preparedData['text'] .= "<blockquote>🤍 <i>Отправлено поздравлений: " . $countSendCongratulations . "</i></blockquote>\n";
             $preparedData['text'] .= "<blockquote>💜 <i>Получено поздравлений: " . $countTakedCongratulations . "</i></blockquote></b>";
             break;

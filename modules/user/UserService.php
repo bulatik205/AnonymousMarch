@@ -144,6 +144,39 @@ class UserService
         }
     }
 
+    public function getCongratulations(): array
+    {
+        # this request maked with AI (someday I'll learn join...)
+        try {
+            $stmt = $this->pdo->prepare("
+            SELECT 
+                c.*,
+                u_from.first_name as from_name,
+                u_recipient.first_name as recipient_name
+            FROM `congratulations` c
+            LEFT JOIN `users` u_from ON c.from_id = u_from.telegram_id
+            LEFT JOIN `users` u_recipient ON c.recipient_id = u_recipient.telegram_id
+            WHERE c.recipient_id = ? OR c.from_id = ?
+            ORDER BY c.created_at DESC
+            LIMIT 50
+        ");
+            $stmt->execute([$this->userRepository['id'], $this->userRepository['id']]);
+            $congratulations = $stmt->fetchAll();
+
+            if (!$congratulations) {
+                return ['success' => false];
+            }
+
+            return [
+                'success' => true,
+                'fields' => $congratulations
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return ['success' => false];
+        }
+    }
+
     public function saveCongratulations(string $text, $from, $recipient, $type): bool
     {
         try {
