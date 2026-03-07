@@ -1,4 +1,7 @@
 <?php
+
+use FFI\Exception;
+
 class UserService
 {
     public array $userRepository;
@@ -90,6 +93,46 @@ class UserService
             $stmt = $this->pdo->prepare("UPDATE `users` SET `stage` = ? WHERE `telegram_id` = ?");
             $stmt->execute([$newStage, $this->userRepository['id']]);
             return true; 
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return false;
+        }
+    }
+
+    public function getUser(): array
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT * FROM `users` WHERE `telegram_id` = ? LIMIT 1");
+            $stmt->execute([$this->userRepository['id']]);
+            $SQLusers = $stmt->fetch();
+
+            $stmt = $this->pdo->prepare("SELECT * FROM `congratulations` WHERE `telegram_id` = ? LIMIT 50");
+            $stmt->execute([$this->userRepository['id']]);
+            $SQLcongratulations = $stmt->fetch();
+
+            return [
+                'success' => true,
+                'user' => $SQLusers,
+                'congratulations' => $SQLcongratulations
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return ['success' => false];
+        }
+    }
+
+    public function saveCongratulations(string $text, $from, $recipient, $type): bool
+    {
+        try {
+            $stmt = $this->pdo->prepare("INSERT INTO `congratulations`(`recipient_id`, `from_id`, `text`, `is_anonym`) VALUES(?, ?, ?, ?)");
+            $stmt->execute([
+                $recipient,
+                $from,
+                $text,
+                $type
+            ]);
+
+            return $stmt->rowCount() > 0;
         } catch (Exception $e) {
             error_log($e->getMessage());
             return false;
