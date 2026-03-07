@@ -258,8 +258,16 @@ if (isset($update['message']['text'])) {
             $preparedData['text'] = "Ваши отправленные поздравления:";
             break;
 
-        case '🎀 Профиль':
-            $preparedData['text'] = "Ваш профиль:\nID: " . USER_ID . "\nИмя: " . FIRST_NAME;
+        case '🍁 Профиль':
+            $resopitory = $userService->getUser();
+            $countSendCongratulations = $userService->getCountSendCongratulations();
+            $countTakedCongratulations = $userService->getCountTakedCongratulations();
+            $preparedData['text'] = "<b>🥷 Ваш профиль \n\n";
+            $preparedData['text'] .= "<blockquote><i>🔑 ID:</i> " . USER_ID . "\n\n";
+            $preparedData['text'] .= "<i>✏️ Имя:</i> " . $resopitory['fields']['first_name'] . "\n";
+            $preparedData['text'] .= "<i>🕐 Зашли в бота:</i> " . ($resopitory['fields']['created_at'] ?? "недавно...") . "</blockquote>\n";
+            $preparedData['text'] .= "<blockquote>🤍 <i>Отправлено поздравлений: " . $countSendCongratulations . "</i></blockquote>\n";
+            $preparedData['text'] .= "<blockquote>💜 <i>Получено поздравлений: " . $countTakedCongratulations . "</i></blockquote></b>";
             break;
 
         case '💫 Статистика':
@@ -273,4 +281,3 @@ if (isset($update['message']['text'])) {
     }
 }
 exit;
-?>

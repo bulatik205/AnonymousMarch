@@ -60,11 +60,11 @@ class UserService
             ];
         } catch (Exception $e) {
             error_log($e->getMessage());
-            return [ 'success' => false ];
+            return ['success' => false];
         }
-    } 
+    }
 
-    public function getRecipientRepository($recipientId): array 
+    public function getRecipientRepository($recipientId): array
     {
         try {
             $stmt = $this->pdo->prepare("SELECT * FROM `users` WHERE `telegram_id` = ?");
@@ -83,7 +83,7 @@ class UserService
             ];
         } catch (Exception $e) {
             error_log($e->getMessage());
-            return [ 'success' => false ];
+            return ['success' => false];
         }
     }
 
@@ -92,7 +92,7 @@ class UserService
         try {
             $stmt = $this->pdo->prepare("UPDATE `users` SET `stage` = ? WHERE `telegram_id` = ?");
             $stmt->execute([$newStage, $this->userRepository['id']]);
-            return true; 
+            return true;
         } catch (Exception $e) {
             error_log($e->getMessage());
             return false;
@@ -104,20 +104,43 @@ class UserService
         try {
             $stmt = $this->pdo->prepare("SELECT * FROM `users` WHERE `telegram_id` = ? LIMIT 1");
             $stmt->execute([$this->userRepository['id']]);
-            $SQLusers = $stmt->fetch();
+            $user = $stmt->fetch();
 
-            $stmt = $this->pdo->prepare("SELECT * FROM `congratulations` WHERE `telegram_id` = ? LIMIT 50");
-            $stmt->execute([$this->userRepository['id']]);
-            $SQLcongratulations = $stmt->fetch();
+            if (!$user) {
+                return ['success' => false];
+            }
 
             return [
                 'success' => true,
-                'user' => $SQLusers,
-                'congratulations' => $SQLcongratulations
+                'fields' => $user
             ];
         } catch (Exception $e) {
             error_log($e->getMessage());
             return ['success' => false];
+        }
+    }
+
+    public function getCountSendCongratulations(): int
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM `congratulations` WHERE `from_id` = ?");
+            $stmt->execute([$this->userRepository['id']]);
+            return (int)$stmt->fetchColumn();
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getCountTakedCongratulations(): int
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM `congratulations` WHERE `recipient_id` = ?");
+            $stmt->execute([$this->userRepository['id']]);
+            return (int)$stmt->fetchColumn();
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return 0;
         }
     }
 
