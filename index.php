@@ -272,9 +272,5 @@ if (isset($update['message']['text'])) {
         $curlService->send();
     }
 }
-
-$preparedData['text'] = "Привет!";
-$curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
-$curlService->send();
-
 exit;
+?>
