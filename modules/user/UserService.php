@@ -194,4 +194,73 @@ class UserService
             return false;
         }
     }
+
+    # this method maked AI
+    public function getGlobalStats(): array
+    {
+        try {
+            $stats = [];
+
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM `congratulations`");
+            $stats['total_congratulations'] = (int)$stmt->fetchColumn();
+
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM `users`");
+            $stats['total_users'] = (int)$stmt->fetchColumn();
+
+            $stmt = $this->pdo->prepare("
+            SELECT 
+                u.telegram_id,
+                u.first_name,
+                u.last_name,
+                COUNT(c.id) as sent_count
+            FROM `users` u
+            LEFT JOIN `congratulations` c ON u.telegram_id = c.from_id
+            GROUP BY u.telegram_id
+            HAVING sent_count > 0
+            ORDER BY sent_count DESC
+            LIMIT 10
+        ");
+            $stmt->execute();
+            $stats['top_senders'] = $stmt->fetchAll();
+
+            $stmt = $this->pdo->prepare("
+            SELECT 
+                u.telegram_id,
+                u.first_name,
+                u.last_name,
+                COUNT(c.id) as received_count
+            FROM `users` u
+            LEFT JOIN `congratulations` c ON u.telegram_id = c.recipient_id
+            GROUP BY u.telegram_id
+            HAVING received_count > 0
+            ORDER BY received_count DESC
+            LIMIT 10
+        ");
+            $stmt->execute();
+            $stats['top_receivers'] = $stmt->fetchAll();
+
+            $stmt = $this->pdo->query("
+            SELECT 
+                COUNT(CASE WHEN is_anonym = 'visible' THEN 1 END) as named_count,
+                COUNT(CASE WHEN is_anonym = 'anonymous' THEN 1 END) as anonymous_count
+            FROM `congratulations`
+        ");
+            $stats['type_stats'] = $stmt->fetch();
+
+            $stmt = $this->pdo->query("
+            SELECT COUNT(*) 
+            FROM `congratulations` 
+            WHERE DATE(created_at) = CURDATE()
+        ");
+            $stats['today_count'] = (int)$stmt->fetchColumn();
+
+            return [
+                'success' => true,
+                'fields' => $stats
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return ['success' => false];
+        }
+    }
 }

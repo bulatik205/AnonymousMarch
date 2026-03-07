@@ -195,7 +195,7 @@ if (isset($update['callback_query']['data'])) {
             'parse_mode' => 'HTML'
         ];
 
-        $emoji = ["🌹", "🪻", "🌼", "🪷", "🌺", "💮", "🌷", "💐", "🌸"];
+        $emoji = ["🌹", "🪻", "🪷", "🌺", "💮", "🌷", "💐", "🌸"];
         $randomEmoji = $emoji[random_int(0, count($emoji) - 1)];
 
         if (strlen($userInput) > 1500) {
@@ -226,6 +226,18 @@ if (isset($update['callback_query']['data'])) {
                 $preparedData['text'] .= "\n\n💘 <b><a href='tg://user?id={$senderId}'>{$senderName}</a></b>";
                 break;
         }
+
+        $emoji = ["❤️‍🩹", "❤️‍🔥", "🩷", "💜", "💜", "🧡", "❤️"];
+        $randomEmoji = $emoji[random_int(0, count($emoji) - 1)];
+
+        $preparedData['reply_markup'] = json_encode([
+            'inline_keyboard' => [
+                [
+                    ['text' => $randomEmoji, 'callback_data' => 'reaction:' . $randomEmoji],
+                    ['text' => '👎', 'callback_data' => 'reaction:👎']
+                ]
+            ]
+        ]);
 
         $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
         $result = $curlService->send();
@@ -293,8 +305,65 @@ if (isset($update['message']['text'])) {
             $preparedData['text'] .= "<blockquote>💜 <i>Получено поздравлений: " . $countTakedCongratulations . "</i></blockquote></b>";
             break;
 
+        # this case make with AI 
         case '💫 Статистика':
-            $preparedData['text'] = "Как пользоваться ботом...";
+            $stats = $userService->getGlobalStats();
+
+            if (!$stats['success']) {
+                $preparedData['text'] = "🌸❌ Ой, статистика завяла... Попробуй позже";
+                break;
+            }
+
+            $s = $stats['fields'];
+
+            $preparedData['text'] = "🌷 <b>Статистика</b>\n\n";
+
+            $preparedData['text'] .= "💐 <b>Букет цифр:</b>\n";
+            $preparedData['text'] .= "<blockquote>";
+            $preparedData['text'] .= "🌸 Поздравлений всего: <b>" . number_format($s['total_congratulations']) . "</b>\n";
+            $preparedData['text'] .= "🌺 Пользователей: <b>" . number_format($s['total_users']) . "</b>\n";
+            $preparedData['text'] .= "🌷 За сегодня: <b>" . $s['today_count'] . "</b>\n";
+            $preparedData['text'] .= "</blockquote>\n";
+
+            $preparedData['text'] .= "💮 <b>Как поздравляют:</b>\n";
+            $preparedData['text'] .= "<blockquote>";
+            $preparedData['text'] .= "🥷 Тайно (анонимно): <b>" . ($s['type_stats']['anonymous_count'] ?? 0) . "</b>\n";
+            $preparedData['text'] .= "👀 Открыто (с именем): <b>" . ($s['type_stats']['named_count'] ?? 0) . "</b>\n";
+            $preparedData['text'] .= "</blockquote>\n";
+
+            if (!empty($s['top_senders'])) {
+                $preparedData['text'] .= "🏵 <b>Больше поздравляют:</b>\n";
+                $preparedData['text'] .= "<blockquote>";
+                foreach (array_slice($s['top_senders'], 0, 5) as $index => $sender) {
+                    $num = $index + 1;
+                    $emoji = ["🌹", "🪻", "🌼", "🪷", "🌺", "💮", "🌷", "💐", "🌸"][$index] ?? "🌺";
+                    $name = $sender['first_name'] ?? 'Пользователь';
+                    if (!empty($sender['last_name'])) {
+                        $name .= " " . mb_substr($sender['last_name'], 0, 1) . ".";
+                    }
+                    $flowers = str_repeat("🌷", min(floor($sender['sent_count'] / 5), 5));
+                    $preparedData['text'] .= "{$emoji} {$name} — <b>{$sender['sent_count']}</b> {$flowers}\n";
+                }
+                $preparedData['text'] .= "</blockquote>\n";
+            }
+
+            if (!empty($s['top_receivers'])) {
+                $preparedData['text'] .= "🎀 <b>Больше получают:</b>\n";
+                $preparedData['text'] .= "<blockquote>";
+                foreach (array_slice($s['top_receivers'], 0, 5) as $index => $receiver) {
+                    $num = $index + 1;
+                    $emoji = ["💐", "🌺", "🪷", "🌻", "🌞"][$index] ?? "💮";
+                    $name = $receiver['first_name'] ?? 'Красавица';
+                    if (!empty($receiver['last_name'])) {
+                        $name .= " " . mb_substr($receiver['last_name'], 0, 1) . ".";
+                    }
+                    $hearts = str_repeat("💗", min(floor($receiver['received_count'] / 5), 5));
+                    $preparedData['text'] .= "{$emoji} {$name} — <b>{$receiver['received_count']}</b> {$hearts}\n";
+                }
+                $preparedData['text'] .= "</blockquote>";
+            }
+
+            $preparedData['text'] .= "\n🌷 <i>С 8 марта, дорогие!</i> 🌷";
             break;
     }
 
