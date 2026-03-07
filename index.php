@@ -21,18 +21,22 @@ require "modules/user/UserService.php";
 $update = json_decode(file_get_contents('php://input'), true);
 $json_response = json_encode($update, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
-if (!isset($update['message']['from']['id']) || !isset($update['message']['chat']['id'])) {
-    error_log("Ошибка: нет нужных полей. " . $update);
+file_put_contents("log.log", $json_response);
+
+$isCallback = isset($update['callback_query']);
+$userData = $isCallback ? $update['callback_query']['from'] : $update['message']['from'];
+$chatId = $isCallback ? $userData['id'] : $update['message']['chat']['id'];
+
+if (!isset($userData['id'])) {
+    error_log("Ошибка: нет ID пользователя. " . json_encode($update));
     exit;
 }
 
-define("USER_ID", $update['message']['from']['id']);
-define("CHAT_ID", $update['message']['chat']['id']);
-define("FIRST_NAME", $update['message']['from']['first_name'] ?? "пользователь");
+define("USER_ID", $userData['id']);
+define("CHAT_ID", $chatId);
+define("FIRST_NAME", $userData['first_name'] ?? "пользователь");
 define("SEND_MESSAGE_URL", "https://api.telegram.org/bot" . API_BOT_TOKEN . "/sendMessage");
 define("SEND_PHOTO_URL", "https://api.telegram.org/bot" . API_BOT_TOKEN . "/sendPhoto");
-
-file_put_contents("log.log", $json_response);
 
 $userRepository = [
     'id' => USER_ID,
@@ -90,10 +94,10 @@ if (
     $preparedData['reply_markup'] = json_encode([
         'inline_keyboard' => [
             [
-                ['text' => '🥷 Анонимно', 'callback_data' => 'anonymouse']
+                ['text' => '🥷 Анонимно', 'callback_data' => 'anonymous']
             ],
             [
-                
+
                 ['text' => '👀 С моим именем', 'callback_data' => 'visible']
             ]
         ]
@@ -138,7 +142,61 @@ if (isset($userInput) && str_starts_with($userInput, '/')) {
                 $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
                 $curlService->send();
             }
+            exit;
     }
+}
+
+if (isset($update['callback_query']['data'])) {
+    $callbackData = $update['callback_query']['data'];
+    $callbackFromId = $update['callback_query']['from']['id'];
+
+    $parts = explode(":", $userStage);
+
+    if (count($parts) >= 3 && $parts[0] === 'type') {
+        $recipientTelegramId = $parts[1];
+        $userInput = $parts[2];
+
+        $preparedData = [
+            'chat_id' => $recipientTelegramId,
+            'parse_mode' => 'HTML'
+        ];
+
+        $emoji = ["🌹", "🪻", "🌼", "🪷", "🌺", "💮", "🌷", "💐", "🌸"];
+        $randomEmoji = $emoji[random_int(0, count($emoji) - 1)];
+
+        if (strlen($userInput) > 1500) {
+            $userInput = mb_substr($userInput, 0, 1500, "UTF-8");
+        }
+
+        $preparedData['text'] = "<b><i>💞 Новое поздравление!</i></b>\n\n";
+        $preparedData['text'] .= "<blockquote>" . $randomEmoji . " " . htmlspecialchars($userInput) . "</blockquote>";
+
+        switch ($callbackData) {
+            case 'anonymous':
+                $preparedData['text'] .= "\n\n<b>💘 Аноним</b>";
+                break;
+            case 'visible':
+                $senderName = $update['callback_query']['from']['first_name'] ?? 'пользователь';
+                $senderId = $callbackFromId;
+                $preparedData['text'] .= "\n\n💘 <b><a href='tg://user?id={$senderId}'>{$senderName}</a></b>";
+                break;
+        }
+
+        $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+        $result = $curlService->send();
+
+        $confirmData = [
+            'chat_id' => $callbackFromId,
+            'parse_mode' => 'HTML',
+            'text' => "{$randomEmoji} Поздравление успешно отправлено!"
+        ];
+        $confirmService = new CurlService($confirmData, SEND_MESSAGE_URL);
+        $confirmService->send();
+
+        $userService->setUserStage('default');
+    }
+
+    exit;
 }
 
 $preparedData['text'] = "Привет!";
