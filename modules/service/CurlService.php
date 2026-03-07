@@ -38,16 +38,20 @@ class CurlService
 
             $photo = new CURLFile($photoPath);
 
+            $replyKeyboard = [
+                ['🪭 Мои поздравления'],
+                ['🍁 Профиль', '💫 Статистика'],
+                ['🪻 Поделиться']
+            ];
+
             $postFields = [
                 'chat_id' => $this->preparedData['chat_id'],
                 'photo' => $photo,
                 'caption' => $caption,
                 'reply_markup' => json_encode([
-                    'inline_keyboard' => [
-                        [
-                            ['text' => '🌹 Отправить ссылку друзьям', 'url' => "https://t.me/share/url?url=🌹%20Отправь%20мне%20поздравление!%0A%0Ahttps://t.me/march_v_bot?start=" . $this->preparedData['chat_id']]
-                        ]
-                    ]
+                    'keyboard' => $replyKeyboard,
+                    'resize_keyboard' => true,
+                    'one_time_keyboard' => false
                 ]),
                 'parse_mode' => 'HTML'
             ];
@@ -64,6 +68,8 @@ class CurlService
                 error_log("Curl error: " . curl_error($ch));
                 return false;
             }
+
+            return true;
         } catch (Exception $e) {
             error_log("Error sending photo: " . $e->getMessage());
             return false;

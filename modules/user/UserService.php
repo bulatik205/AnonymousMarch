@@ -1,4 +1,7 @@
 <?php
+
+use FFI\Exception;
+
 class UserService
 {
     public array $userRepository;
@@ -57,11 +60,11 @@ class UserService
             ];
         } catch (Exception $e) {
             error_log($e->getMessage());
-            return [ 'success' => false ];
+            return ['success' => false];
         }
-    } 
+    }
 
-    public function getRecipientRepository($recipientId): array 
+    public function getRecipientRepository($recipientId): array
     {
         try {
             $stmt = $this->pdo->prepare("SELECT * FROM `users` WHERE `telegram_id` = ?");
@@ -80,7 +83,7 @@ class UserService
             ];
         } catch (Exception $e) {
             error_log($e->getMessage());
-            return [ 'success' => false ];
+            return ['success' => false];
         }
     }
 
@@ -89,9 +92,225 @@ class UserService
         try {
             $stmt = $this->pdo->prepare("UPDATE `users` SET `stage` = ? WHERE `telegram_id` = ?");
             $stmt->execute([$newStage, $this->userRepository['id']]);
-            return true; 
+            return true;
         } catch (Exception $e) {
             error_log($e->getMessage());
+            return false;
+        }
+    }
+
+    public function getUser(): array
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT * FROM `users` WHERE `telegram_id` = ? LIMIT 1");
+            $stmt->execute([$this->userRepository['id']]);
+            $user = $stmt->fetch();
+
+            if (!$user) {
+                return ['success' => false];
+            }
+
+            return [
+                'success' => true,
+                'fields' => $user
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return ['success' => false];
+        }
+    }
+
+    public function getCountSendCongratulations(): int
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM `congratulations` WHERE `from_id` = ?");
+            $stmt->execute([$this->userRepository['id']]);
+            return (int)$stmt->fetchColumn();
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getCountTakedCongratulations(): int
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM `congratulations` WHERE `recipient_id` = ?");
+            $stmt->execute([$this->userRepository['id']]);
+            return (int)$stmt->fetchColumn();
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return 0;
+        }
+    }
+
+    public function getCongratulations(): array
+    {
+        # this request maked with AI (someday I'll learn join...)
+        try {
+            $stmt = $this->pdo->prepare("
+            SELECT 
+                c.*,
+                u_from.first_name as from_name,
+                u_recipient.first_name as recipient_name
+            FROM `congratulations` c
+            LEFT JOIN `users` u_from ON c.from_id = u_from.telegram_id
+            LEFT JOIN `users` u_recipient ON c.recipient_id = u_recipient.telegram_id
+            WHERE c.recipient_id = ? OR c.from_id = ?
+            ORDER BY c.created_at DESC
+            LIMIT 50
+        ");
+            $stmt->execute([$this->userRepository['id'], $this->userRepository['id']]);
+            $congratulations = $stmt->fetchAll();
+
+            if (!$congratulations) {
+                return ['success' => false];
+            }
+
+            return [
+                'success' => true,
+                'fields' => $congratulations
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return ['success' => false];
+        }
+    }
+
+    public function saveCongratulations(string $text, $from, $recipient, $type): bool
+    {
+        try {
+            $stmt = $this->pdo->prepare("INSERT INTO `congratulations`(`recipient_id`, `from_id`, `text`, `is_anonym`) VALUES(?, ?, ?, ?)");
+            $stmt->execute([
+                $recipient,
+                $from,
+                $text,
+                $type
+            ]);
+
+            return $stmt->rowCount() > 0;
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return false;
+        }
+    }
+
+    # this method maked AI
+    public function getGlobalStats(): array
+    {
+        try {
+            $stats = [];
+
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM `congratulations`");
+            $stats['total_congratulations'] = (int)$stmt->fetchColumn();
+
+            $stmt = $this->pdo->query("SELECT COUNT(*) FROM `users`");
+            $stats['total_users'] = (int)$stmt->fetchColumn();
+
+            $stmt = $this->pdo->prepare("
+            SELECT 
+                u.telegram_id,
+                u.first_name,
+                u.last_name,
+                COUNT(c.id) as sent_count
+            FROM `users` u
+            LEFT JOIN `congratulations` c ON u.telegram_id = c.from_id
+            GROUP BY u.telegram_id
+            HAVING sent_count > 0
+            ORDER BY sent_count DESC
+            LIMIT 10
+        ");
+            $stmt->execute();
+            $stats['top_senders'] = $stmt->fetchAll();
+
+            $stmt = $this->pdo->prepare("
+            SELECT 
+                u.telegram_id,
+                u.first_name,
+                u.last_name,
+                COUNT(c.id) as received_count
+            FROM `users` u
+            LEFT JOIN `congratulations` c ON u.telegram_id = c.recipient_id
+            GROUP BY u.telegram_id
+            HAVING received_count > 0
+            ORDER BY received_count DESC
+            LIMIT 10
+        ");
+            $stmt->execute();
+            $stats['top_receivers'] = $stmt->fetchAll();
+
+            $stmt = $this->pdo->query("
+            SELECT 
+                COUNT(CASE WHEN is_anonym = 'visible' THEN 1 END) as named_count,
+                COUNT(CASE WHEN is_anonym = 'anonymous' THEN 1 END) as anonymous_count
+            FROM `congratulations`
+        ");
+            $stats['type_stats'] = $stmt->fetch();
+
+            $stmt = $this->pdo->query("
+            SELECT COUNT(*) 
+            FROM `congratulations` 
+            WHERE DATE(created_at) = CURDATE()
+        ");
+            $stats['today_count'] = (int)$stmt->fetchColumn();
+
+            return [
+                'success' => true,
+                'fields' => $stats
+            ];
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            return ['success' => false];
+        }
+    }
+
+    # обновленный метод saveReaction
+    public function saveReaction($congratulationId, $fromId, $toId, $reaction): array
+    {
+        try {
+            // Сохраняем реакцию (предполагаем, что проверка уже была сделана)
+            $stmt = $this->pdo->prepare("INSERT INTO reactions (congratulation_id, from_id, to_id, reaction) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$congratulationId, $fromId, $toId, $reaction]);
+
+            return [
+                'success' => true
+            ];
+        } catch (Exception $e) {
+            error_log("Reaction error: " . $e->getMessage());
+            return ['success' => false];
+        }
+    }
+
+    public function getCongratulationById($id)
+    {
+        try {
+            $stmt = $this->pdo->prepare("
+            SELECT c.*, 
+                   u_from.first_name as from_name,
+                   u_recipient.first_name as recipient_name
+            FROM congratulations c
+            LEFT JOIN users u_from ON c.from_id = u_from.telegram_id
+            LEFT JOIN users u_recipient ON c.recipient_id = u_recipient.telegram_id
+            WHERE c.id = ?
+        ");
+            $stmt->execute([$id]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            error_log("getCongratulationById result: " . print_r($result, true)); // временный лог
+            return $result;
+        } catch (Exception $e) {
+            error_log("Error: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    public function getUserReaction($congratulationId, $userId)
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT reaction FROM reactions WHERE congratulation_id = ? AND from_id = ?");
+            $stmt->execute([$congratulationId, $userId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            error_log("Error checking reaction: " . $e->getMessage());
             return false;
         }
     }
