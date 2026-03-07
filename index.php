@@ -70,6 +70,31 @@ if (!$getStage['success']) {
 $userStage = $getStage['fields']['stage'];
 $userInput = $update['message']['text'];
 
+$keyboard = [
+    ['🪭 Мои поздравления'],
+    ['🍁 Профиль', '💫 Статистика']
+];
+
+if (isset($userInput) && $userInput == "❌ Отменить") {
+    $setNewStage = $userService->setUserStage("await");
+
+    $confirmData = [
+        'chat_id' => CHAT_ID,
+        'parse_mode' => 'HTML',
+        'reply_markup' => json_encode([
+            'keyboard' => $keyboard,
+            'resize_keyboard' => true,
+            'one_time_keyboard' => false,
+            'input_field_placeholder' => 'Выберите действие'
+        ]),
+        'text' => "❌ Поздравление отменено!"
+    ];
+    $confirmService = new CurlService($confirmData, SEND_MESSAGE_URL);
+    $confirmService->send();
+
+    exit;
+}
+
 if (
     isset($userInput)
     && str_starts_with($userStage, 'input:')
@@ -120,6 +145,15 @@ if (isset($userInput) && str_starts_with($userInput, '/')) {
                 if ($recipientRepository['success']) {
                     $recipientFirstName = isset($recipientRepository['fields']['first_name']) ? $recipientRepository['fields']['first_name'] : $recipientRepository['fields']['telegram_id'];
                     $preparedData['text'] = "<b><i>🌸 Отправь " . $recipientFirstName . " поздравление на 8 марта</i>\n\n<blockquote>🌹 Введи свой текст ниже:</blockquote></b>";
+                    $keyboard = [
+                        ['❌ Отменить']
+                    ];
+                    $preparedData['reply_markup'] = json_encode([
+                        'keyboard' => $keyboard,
+                        'resize_keyboard' => true,
+                        'one_time_keyboard' => false,
+                        'input_field_placeholder' => 'Выберите действие'
+                    ]);
                     $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
                     $curlService->send();
 
@@ -168,6 +202,17 @@ if (isset($update['callback_query']['data'])) {
             $userInput = mb_substr($userInput, 0, 1500, "UTF-8");
         }
 
+        $saveCongratulations = $userService->saveCongratulations($userInput, USER_ID, $recipientTelegramId, $callbackData);
+
+        if (!$saveCongratulations) {
+            $preparedData['chat_id'] = USER_ID;
+            $preparedData['text'] = "Ошибка сервера. Попробуйте позже";
+
+            $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+            $result = $curlService->send();
+            exit;
+        }
+
         $preparedData['text'] = "<b><i>💞 Новое поздравление!</i></b>\n\n";
         $preparedData['text'] .= "<blockquote>" . $randomEmoji . " " . htmlspecialchars($userInput) . "</blockquote>";
 
@@ -188,15 +233,44 @@ if (isset($update['callback_query']['data'])) {
         $confirmData = [
             'chat_id' => $callbackFromId,
             'parse_mode' => 'HTML',
+            'reply_markup' => json_encode([
+                'keyboard' => $keyboard,
+                'resize_keyboard' => true,
+                'one_time_keyboard' => false,
+                'input_field_placeholder' => 'Выберите действие'
+            ]),
             'text' => "{$randomEmoji} Поздравление успешно отправлено!"
         ];
         $confirmService = new CurlService($confirmData, SEND_MESSAGE_URL);
         $confirmService->send();
 
-        $userService->setUserStage('default');
+        $userService->setUserStage('await');
     }
 
     exit;
+}
+
+if (isset($update['message']['text'])) {
+    $text = $update['message']['text'];
+
+    switch ($text) {
+        case '🪭 Мои поздравления':
+            $preparedData['text'] = "Ваши отправленные поздравления:";
+            break;
+
+        case '🎀 Профиль':
+            $preparedData['text'] = "Ваш профиль:\nID: " . USER_ID . "\nИмя: " . FIRST_NAME;
+            break;
+
+        case '💫 Статистика':
+            $preparedData['text'] = "Как пользоваться ботом...";
+            break;
+    }
+
+    if (isset($preparedData['text'])) {
+        $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+        $curlService->send();
+    }
 }
 
 $preparedData['text'] = "Привет!";
