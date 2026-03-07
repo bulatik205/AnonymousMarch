@@ -72,7 +72,8 @@ $userInput = $update['message']['text'];
 
 $keyboard = [
     ['🪭 Мои поздравления'],
-    ['🍁 Профиль', '💫 Статистика']
+    ['🍁 Профиль', '💫 Статистика'],
+    ['🪻 Поделиться']
 ];
 
 if (isset($userInput) && $userInput == "❌ Отменить") {
@@ -180,7 +181,7 @@ if (isset($userInput) && str_starts_with($userInput, '/')) {
     }
 }
 
-if (isset($update['callback_query']['data'])) {
+if (isset($update['callback_query']['data']) && (str_starts_with($update['callback_query']['data'], "visible") || str_starts_with($update['callback_query']['data'], "anonymous"))) {
     $callbackData = $update['callback_query']['data'];
     $callbackFromId = $update['callback_query']['from']['id'];
 
@@ -227,21 +228,23 @@ if (isset($update['callback_query']['data'])) {
                 break;
         }
 
-        $emoji = ["❤️‍🩹", "❤️‍🔥", "🩷", "💜", "💜", "🧡", "❤️"];
-        $randomEmoji = $emoji[random_int(0, count($emoji) - 1)];
+        $congratulationId = $pdo->lastInsertId();
+
+        $reactionEmojis = [["❤️‍🩹", "❤️‍🔥", "🩷"][random_int(0, 2)], ["💜", "🧡", "❤️"][random_int(0, 2)], "👎"];
+        $reactionButtons = [];
+
+        foreach ($reactionEmojis as $e) {
+            $reactionButtons[] = ['text' => $e, 'callback_data' => "reaction:{$congratulationId}:{$e}"];
+        }
 
         $preparedData['reply_markup'] = json_encode([
-            'inline_keyboard' => [
-                [
-                    ['text' => $randomEmoji, 'callback_data' => 'reaction:' . $randomEmoji],
-                    ['text' => '👎', 'callback_data' => 'reaction:👎']
-                ]
-            ]
+            'inline_keyboard' => array_chunk($reactionButtons, 3)
         ]);
 
         $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
         $result = $curlService->send();
 
+        $confirmEmoji = ["❤️‍🩹", "❤️‍🔥", "🩷", "💜", "🧡", "❤️"][random_int(0, 5)];
         $confirmData = [
             'chat_id' => $callbackFromId,
             'parse_mode' => 'HTML',
@@ -251,12 +254,98 @@ if (isset($update['callback_query']['data'])) {
                 'one_time_keyboard' => false,
                 'input_field_placeholder' => 'Выберите действие'
             ]),
-            'text' => "{$randomEmoji} Поздравление успешно отправлено!"
+            'text' => "{$confirmEmoji} Поздравление успешно отправлено!"
         ];
         $confirmService = new CurlService($confirmData, SEND_MESSAGE_URL);
         $confirmService->send();
 
         $userService->setUserStage('await');
+    }
+
+    exit;
+}
+
+# обработчик реакций
+if (isset($update['callback_query']['data']) && str_starts_with($update['callback_query']['data'], 'reaction:')) {
+    $callbackData = $update['callback_query']['data'];
+    $callbackFromId = $update['callback_query']['from']['id'];
+    $callbackFromName = $update['callback_query']['from']['first_name'] ?? 'Пользователь';
+    $messageId = $update['callback_query']['message']['message_id'];
+    $chatId = $update['callback_query']['message']['chat']['id'];
+
+    $parts = explode(':', $callbackData);
+    $congratulationId = $parts[1] ?? 0;
+    $reactionEmoji = $parts[2] ?? '❤️';
+
+    if (!$congratulationId) {
+        exit;
+    }
+
+    $congratulation = $userService->getCongratulationById($congratulationId);
+
+    if (!$congratulation) {
+        exit;
+    }
+
+    $toId = ($congratulation['recipient_id'] == $callbackFromId) ? $congratulation['from_id'] : $congratulation['recipient_id'];
+
+    error_log("toId: " . $toId . " from callbackFromId: " . $callbackFromId);
+
+    $existingReaction = $userService->getUserReaction($congratulationId, $callbackFromId);
+
+    if ($existingReaction) {
+        $answerData = [
+            'callback_query_id' => $update['callback_query']['id'],
+            'text' => '❌ Ты уже поставил реакцию!',
+            'show_alert' => true
+        ];
+        $curlService = new CurlService($answerData, "https://api.telegram.org/bot" . API_BOT_TOKEN . "/answerCallbackQuery");
+        $curlService->send();
+        exit;
+    }
+
+    $saveResult = $userService->saveReaction($congratulationId, $callbackFromId, $toId, $reactionEmoji);
+
+    if (!$saveResult['success']) {
+        exit;
+    }
+
+    $newText = "💞 " . $callbackFromName . " поставил реакцию: " . $reactionEmoji;
+
+    $editData = [
+        'chat_id' => $chatId,
+        'message_id' => $messageId,
+        'text' => $newText,
+        'parse_mode' => 'HTML',
+        'reply_markup' => json_encode(['inline_keyboard' => []])
+    ];
+
+    $curlService = new CurlService($editData, "https://api.telegram.org/bot" . API_BOT_TOKEN . "/editMessageText");
+    $curlService->send();
+
+    $answerData = [
+        'callback_query_id' => $update['callback_query']['id'],
+        'text' => "✅ Готово",
+        'show_alert' => false
+    ];
+    $curlService = new CurlService($answerData, "https://api.telegram.org/bot" . API_BOT_TOKEN . "/answerCallbackQuery");
+    $curlService->send();
+
+    if ($toId != $callbackFromId) {
+        $targetName = ($callbackFromId == $congratulation['recipient_id'])
+            ? ($congratulation['from_name'] ?? 'Отправитель')
+            : ($congratulation['recipient_name'] ?? 'Получатель');
+
+        $notifyText = "💌 " . $targetName . " поставил реакцию: " . $reactionEmoji;
+
+        $notifyData = [
+            'chat_id' => $toId,
+            'text' => $notifyText,
+            'parse_mode' => 'HTML'
+        ];
+
+        $curlService = new CurlService($notifyData, SEND_MESSAGE_URL);
+        $curlService->send();
     }
 
     exit;
@@ -305,6 +394,19 @@ if (isset($update['message']['text'])) {
             $preparedData['text'] .= "<blockquote>💜 <i>Получено поздравлений: " . $countTakedCongratulations . "</i></blockquote></b>";
             break;
 
+        case '🪻 Поделиться':
+            $userLink = "https://t.me/march_v_bot?start=" . USER_ID;
+
+            $preparedData['text'] = "🍀 <b>Твоя ссылка:</b>\n<code>" . $userLink . "</code>";
+            $preparedData['reply_markup'] = json_encode([
+                'inline_keyboard' => [
+                    [
+                        ['text' => '🍃 Поделиться', 'url' => 'https://t.me/share/url?url=' . urlencode($userLink) . "&text=\n🌹 Поздравь меня с 8 марта!"]
+                    ]
+                ]
+            ]);
+            break;
+
         # this case make with AI 
         case '💫 Статистика':
             $stats = $userService->getGlobalStats();
@@ -335,14 +437,12 @@ if (isset($update['message']['text'])) {
                 $preparedData['text'] .= "🏵 <b>Больше поздравляют:</b>\n";
                 $preparedData['text'] .= "<blockquote>";
                 foreach (array_slice($s['top_senders'], 0, 5) as $index => $sender) {
-                    $num = $index + 1;
-                    $emoji = ["🌹", "🪻", "🌼", "🪷", "🌺", "💮", "🌷", "💐", "🌸"][$index] ?? "🌺";
+                    $emoji = ["🌹", "🪻", "🌼", "🪷", "🌺"][$index] ?? "🌸";
                     $name = $sender['first_name'] ?? 'Пользователь';
                     if (!empty($sender['last_name'])) {
                         $name .= " " . mb_substr($sender['last_name'], 0, 1) . ".";
                     }
-                    $flowers = str_repeat("🌷", min(floor($sender['sent_count'] / 5), 5));
-                    $preparedData['text'] .= "{$emoji} {$name} — <b>{$sender['sent_count']}</b> {$flowers}\n";
+                    $preparedData['text'] .= "{$emoji} {$name} — <b>{$sender['sent_count']}</b>\n";
                 }
                 $preparedData['text'] .= "</blockquote>\n";
             }
@@ -351,14 +451,12 @@ if (isset($update['message']['text'])) {
                 $preparedData['text'] .= "🎀 <b>Больше получают:</b>\n";
                 $preparedData['text'] .= "<blockquote>";
                 foreach (array_slice($s['top_receivers'], 0, 5) as $index => $receiver) {
-                    $num = $index + 1;
                     $emoji = ["💐", "🌺", "🪷", "🌻", "🌞"][$index] ?? "💮";
                     $name = $receiver['first_name'] ?? 'Красавица';
                     if (!empty($receiver['last_name'])) {
                         $name .= " " . mb_substr($receiver['last_name'], 0, 1) . ".";
                     }
-                    $hearts = str_repeat("💗", min(floor($receiver['received_count'] / 5), 5));
-                    $preparedData['text'] .= "{$emoji} {$name} — <b>{$receiver['received_count']}</b> {$hearts}\n";
+                    $preparedData['text'] .= "{$emoji} {$name} — <b>{$receiver['received_count']}</b>\n";
                 }
                 $preparedData['text'] .= "</blockquote>";
             }

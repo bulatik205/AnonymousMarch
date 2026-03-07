@@ -38,9 +38,10 @@ class CurlService
 
             $photo = new CURLFile($photoPath);
 
-            $keyboard = [
+            $replyKeyboard = [
                 ['🪭 Мои поздравления'],
-                ['🍁 Профиль', '💫 Статистика']
+                ['🍁 Профиль', '💫 Статистика'],
+                ['🪻 Поделиться']
             ];
 
             $postFields = [
@@ -48,10 +49,9 @@ class CurlService
                 'photo' => $photo,
                 'caption' => $caption,
                 'reply_markup' => json_encode([
-                    'keyboard' => $keyboard,
+                    'keyboard' => $replyKeyboard,
                     'resize_keyboard' => true,
-                    'one_time_keyboard' => false,
-                    'input_field_placeholder' => 'Выберите действие'
+                    'one_time_keyboard' => false
                 ]),
                 'parse_mode' => 'HTML'
             ];

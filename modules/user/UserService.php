@@ -263,4 +263,55 @@ class UserService
             return ['success' => false];
         }
     }
+
+    # обновленный метод saveReaction
+    public function saveReaction($congratulationId, $fromId, $toId, $reaction): array
+    {
+        try {
+            // Сохраняем реакцию (предполагаем, что проверка уже была сделана)
+            $stmt = $this->pdo->prepare("INSERT INTO reactions (congratulation_id, from_id, to_id, reaction) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$congratulationId, $fromId, $toId, $reaction]);
+
+            return [
+                'success' => true
+            ];
+        } catch (Exception $e) {
+            error_log("Reaction error: " . $e->getMessage());
+            return ['success' => false];
+        }
+    }
+
+    public function getCongratulationById($id)
+    {
+        try {
+            $stmt = $this->pdo->prepare("
+            SELECT c.*, 
+                   u_from.first_name as from_name,
+                   u_recipient.first_name as recipient_name
+            FROM congratulations c
+            LEFT JOIN users u_from ON c.from_id = u_from.telegram_id
+            LEFT JOIN users u_recipient ON c.recipient_id = u_recipient.telegram_id
+            WHERE c.id = ?
+        ");
+            $stmt->execute([$id]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            error_log("getCongratulationById result: " . print_r($result, true)); // временный лог
+            return $result;
+        } catch (Exception $e) {
+            error_log("Error: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    public function getUserReaction($congratulationId, $userId)
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT reaction FROM reactions WHERE congratulation_id = ? AND from_id = ?");
+            $stmt->execute([$congratulationId, $userId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            error_log("Error checking reaction: " . $e->getMessage());
+            return false;
+        }
+    }
 }
