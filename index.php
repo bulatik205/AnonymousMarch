@@ -66,10 +66,44 @@ if (!$getStage['success']) {
 $userStage = $getStage['fields']['stage'];
 $userInput = $update['message']['text'];
 
-if (isset($update['message']['text']) && $userStage == "input") {
+if (
+    isset($userInput)
+    && str_starts_with($userStage, 'input:')
+    && !str_starts_with($userInput, '/')
+) {
+    $parts = explode(":", $userStage);
+    $recipientTelegramId = $parts[1];
+
+    if (strlen($userInput) > 1500) {
+        $userInput = mb_substr($userInput, 0, 1500, "UTF-8");
+    }
+
+    $setNewStage = $userService->setUserStage("type:" . $recipientTelegramId . ":" . $userInput);
+    if (!$setNewStage) {
+        $preparedData['text'] = "Ошибка сервера. Попробуйте позже." . $setNewStage;
+        $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+        $curlService->send();
+        exit;
+    }
+
+    $preparedData['text'] = "<b><i>🏮 Как отправить поздравление?</i></b>";
+    $preparedData['reply_markup'] = json_encode([
+        'inline_keyboard' => [
+            [
+                ['text' => '🥷 Анонимно', 'callback_data' => 'anonymouse']
+            ],
+            [
+                
+                ['text' => '👀 С моим именем', 'callback_data' => 'visible']
+            ]
+        ]
+    ]);
+    $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
+    $curlService->send();
+    exit;
 }
 
-if (isset($update['message']['text']) && str_starts_with($userInput, '/')) {
+if (isset($userInput) && str_starts_with($userInput, '/')) {
     $parts = explode(" ", $userInput);
     $command = $parts[0];
     $queryParam = isset($parts[1]) ? substr($parts[1], 0, 50) : null;
@@ -80,14 +114,14 @@ if (isset($update['message']['text']) && str_starts_with($userInput, '/')) {
                 $recipientRepository = $userService->getRecipientRepository($queryParam);
 
                 if ($recipientRepository['success']) {
-                    $recipientFirstName = isset($recipientRepository['fields']['first_name']) ? $recipientRepository['fields']['first_name'] : $recipientRepository['fields']['id'];
+                    $recipientFirstName = isset($recipientRepository['fields']['first_name']) ? $recipientRepository['fields']['first_name'] : $recipientRepository['fields']['telegram_id'];
                     $preparedData['text'] = "<b><i>🌸 Отправь " . $recipientFirstName . " поздравление на 8 марта</i>\n\n<blockquote>🌹 Введи свой текст ниже:</blockquote></b>";
                     $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
                     $curlService->send();
 
-                    $setNewStage = $userService->setUserStage("input");
+                    $setNewStage = $userService->setUserStage("input:" . $recipientRepository['fields']['telegram_id']);
                     if (!$setNewStage) {
-                        $preparedData['text'] = "Ошибка сервера. Попробуйте позже. С: " . $setNewStage;
+                        $preparedData['text'] = "Ошибка сервера. Попробуйте позже." . $setNewStage;
                         $curlService = new CurlService($preparedData, SEND_MESSAGE_URL);
                         $curlService->send();
                     }
