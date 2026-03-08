@@ -1,4 +1,14 @@
 <?php
+
+/**
+ * AnonymousMarch - Telegram bot for March 8 greetings
+ * Copyright (C) 2026 bulatik205
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License.
+ */
+
 if (!file_exists("config/config.php")) {
     error_log("File config/config.php dont exist");
     exit;
