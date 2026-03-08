@@ -332,11 +332,7 @@ if (isset($update['callback_query']['data']) && str_starts_with($update['callbac
     $curlService->send();
 
     if ($toId != $callbackFromId) {
-        $targetName = ($callbackFromId == $congratulation['recipient_id'])
-            ? ($congratulation['from_name'] ?? 'Отправитель')
-            : ($congratulation['recipient_name'] ?? 'Получатель');
-
-        $notifyText = "💌 " . $targetName . " поставил реакцию: " . $reactionEmoji;
+        $notifyText = "💌 " . $callbackFromName . " поставил реакцию: " . $reactionEmoji;
 
         $notifyData = [
             'chat_id' => $toId,
