@@ -368,8 +368,13 @@ if (isset($update['message']['text'])) {
                     $action = "<b>кому:</b> {$name}";
                 } else {
                     $arrow = "Получено";
-                    $name = $c['from_name'] ?? $c['from_id'];
-                    $action = "<b>от:</b> {$name}";
+
+                    if ($c['is_anonym'] == 'anonymous') {
+                        $action = "<b>от:</b> Аноним";
+                    } else {
+                        $name = $c['from_name'] ?? $c['from_id'];
+                        $action = "<b>от:</b> {$name}";
+                    }
                 }
 
                 $anon = ($c['is_anonym'] == 'visible') ? "👀 [С именем]" : "🥷 [Анонимно]";
